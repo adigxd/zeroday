@@ -299,7 +299,7 @@ Difficulty is set in Settings and applies uniformly to all AIs in the session.
 | Parameter                          | Easy        | Medium      | Hard        |
 |------------------------------------|-------------|-------------|-------------|
 | Block-breaking CPS                 | 4           | 9           | 16          |
-| Move speed (ms per tile)           | 250ms       | 187ms       | 125ms       |
+| Move speed (ms per tile)           | 250ms       | 187ms       | 150ms       |
 | Move hesitation (per step)         | 35%         | 12%         | 0%          |
 | Flee HP threshold                  | 12          | 18          | Never       |
 | Chase range (tiles, Manhattan)     | Unlimited   | Unlimited   | Unlimited   |

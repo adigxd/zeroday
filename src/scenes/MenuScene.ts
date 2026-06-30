@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { loadTheme, getColors } from '../config/Theme';
 
 export class MenuScene extends Phaser.Scene {
-  private playerCount = 2;
+  private playerCount = 4;
   private countText!: Phaser.GameObjects.Text;
 
   constructor() { super('MenuScene'); }

@@ -44,7 +44,7 @@ export class AIPlayer extends Entity {
     this.difficulty = difficulty;
     this.cpsMs = 1000 / (AI_CPS[difficulty] ?? 4);
     // Movement speed scales with difficulty: Easy=250ms, Medium=187ms, Hard=125ms (half player speed)
-    this.moveDuration = difficulty === 'hard' ? 125 : difficulty === 'medium' ? 187 : 250;
+    this.moveDuration = difficulty === 'hard' ? 150 : difficulty === 'medium' ? 187 : 250;
     this.moveCooldown = Math.random() * MOVE_DURATION;
     this.wanderTimer = Math.random() * 600;
   }
@@ -466,7 +466,7 @@ export class AIPlayer extends Entity {
     const before = { col: this.col, row: this.row };
     this.moveTo(dir, map);
     const moved = this.col !== before.col || this.row !== before.row;
-    if (moved) this.moveCooldown = this.moveDuration;
+    if (moved) this.moveCooldown = this.moveDuration + (Math.random() - 0.5) * 32; // ±16ms jitter
     return moved;
   }
 
