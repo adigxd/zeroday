@@ -24,6 +24,10 @@ export class AIPlayer extends Entity {
   private dodgeDir: Direction | null = null;
   // Opposite of dodgeDir — forbidden while a dodge is active to prevent jitter
   private avoidDir: Direction | null = null;
+  // Idle backstop — tracks how long the AI has been at the same tile position
+  private idleMs = 0;
+  private idleLastCol = -1;
+  private idleLastRow = -1;
 
 
   constructor(
@@ -66,6 +70,22 @@ export class AIPlayer extends Entity {
       case 'flee':       this.doFlee(target, map); break;
       case 'seek_crate': this.doSeekCrate(map); break;
       case 'seek_item':  this.doSeekItem(map); break;
+    }
+
+    // Idle backstop — if position hasn't changed in 500ms, force a random move
+    if (this.col === this.idleLastCol && this.row === this.idleLastRow) {
+      this.idleMs += delta;
+      if (this.idleMs >= 500 && this.moveCooldown <= 0) {
+        const dirs: Direction[] = ['up', 'down', 'left', 'right'];
+        for (const d of dirs.sort(() => Math.random() - 0.5)) {
+          if (this.tryMoveDir(d, map)) break;
+        }
+        this.idleMs = 0;
+      }
+    } else {
+      this.idleMs = 0;
+      this.idleLastCol = this.col;
+      this.idleLastRow = this.row;
     }
 
     // Opportunistic ranged shot — aligned on same row/col, within weapon range, clear LOS
@@ -144,12 +164,8 @@ export class AIPlayer extends Entity {
       return;
     }
 
-    // ── Chase range (scales with difficulty) ──────────────────────────────
-    const chaseRange = this.difficulty === 'easy' ? 10
-                     : this.difficulty === 'medium' ? 20
-                     : 999;
-
-    if (dist <= chaseRange) {
+    // AI is always aware of every entity's position — no chase range cap.
+    if (dist > 1) {
       // Keep going if already mid-seek and enemy isn't right on top of us
       if ((this.state === 'seek_crate' || this.state === 'seek_item') && dist > 4) {
         return;
@@ -203,28 +219,6 @@ export class AIPlayer extends Entity {
       this.itemTarget = null;
       return;
     }
-
-    // ── Knife holders proactively seek crates when player is far away ────────
-    // Weapon holders don't — they just wander. Crate diversion for weapon
-    // holders happens via the 22% mid-chase roll, not when the player is far.
-    if (this.weapon === 'knife' && this.stateTimer <= 0) {
-      const crateRadius = this.difficulty === 'easy' ? 4 : this.difficulty === 'medium' ? 8 : 12;
-      const baseChance  = this.difficulty === 'easy' ? 0.35 : this.difficulty === 'medium' ? 0.55 : 0.75;
-      const crateChance = Math.min(0.92, baseChance * 1.6);
-
-      if (Math.random() < crateChance) {
-        const crate = this.findNearbyCrate(map, crateRadius, true);
-        if (crate) {
-          this.crateTarget = crate;
-          this.state = 'seek_crate';
-          this.stateTimer = 2000 + Math.random() * 2000;
-          return;
-        }
-      }
-      this.stateTimer = 800 + Math.random() * 800;
-    }
-
-    if (this.state !== 'seek_crate' && this.state !== 'seek_item') this.state = 'wander';
   }
 
   // ── State handlers ───────────────────────────────────────────────────────

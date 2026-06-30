@@ -68,7 +68,8 @@ During Game:
 
 - **Theme** — toggle button showing ☀ (light) or ☽ (dark); clicking switches theme and immediately restarts the settings scene. All UI scenes (Menu, Settings, Stats, Pause) read the stored theme on create.
 - **AI Difficulty** — ◀/▶ cycle toggle: Easy / Medium / Hard (affects AI block-breaking CPS and behavior; see §6.2)
-- **Attack** — ◀/▶ cycle toggle: Held (hold key to auto-fire at weapon cooldown rate) / Tap (one press = one shot). Default: Held. Constant across difficulties.
+- **Attack** — ◀/▶ cycle toggle: Held (hold key to auto-fire at weapon cooldown rate) / Tap (one press = one shot). Default: Held.
+- **Movement** — ◀/▶ cycle toggle: Held (hold key = continuous movement at move-cooldown rate, default) / Tap (one keypress = one tile).
 - **Hotkey Bindings** — 7 rebindable actions, displayed as a list:
   | Action    | Default      |
   |-----------|--------------|
@@ -266,7 +267,7 @@ Effective drop rate per crate: 50% nothing, ~5% per item (each of the 10 items e
 The AI operates on a 6-state machine (`src/ai/AIStateMachine.ts`):
 
 ```
-[Wander]      → target within chase range                  → [Chase]
+[Wander]      → target exists (always — no range cap)      → [Chase]
 [Wander]      → random crate-seek roll passes              → [SeekCrate]
 [Wander]      → floor item nearby (weapon/medkit)          → [SeekItem]
 [Chase]       → adjacent to target (dist=1)                → [Attack]
@@ -301,7 +302,7 @@ Difficulty is set in Settings and applies uniformly to all AIs in the session.
 | Move speed (ms per tile)           | 250ms       | 187ms       | 125ms       |
 | Move hesitation (per step)         | 35%         | 12%         | 0%          |
 | Flee HP threshold                  | 12          | 18          | Never       |
-| Chase range (tiles, Manhattan)     | 10          | 20          | Unlimited   |
+| Chase range (tiles, Manhattan)     | Unlimited   | Unlimited   | Unlimited   |
 | Crate-seek probability             | 35%         | 55%         | 75%         |
 | Crate-seek search radius           | 4 tiles     | 8 tiles     | 12 tiles    |
 | Crate-seek state duration          | 2000–4000ms | 2000–4000ms | 2000–4000ms |
@@ -324,7 +325,7 @@ Difficulty is set in Settings and applies uniformly to all AIs in the session.
 | Crate interrupt enemy distance     | 3 tiles     | 3 tiles     | 3 tiles     |
 | Flee medkit scan radius            | 6 tiles     | 6 tiles     | 6 tiles     |
 
-**Crate-seek evaluation (out of chase range):** only knife holders proactively seek crates when the player is outside chase range — they need a weapon upgrade. Weapon holders simply wander; their crate diversion happens via the 22% mid-chase roll instead, so they don't appear to ignore the player just because the distance is large.
+**Global awareness:** AI is always aware of every entity's position — there is no chase range cap. The moment a target exists, the AI will pursue it (subject to crate/item diversions and the state timer). This eliminates the "shuffling forever" failure mode on large maps.
 
 **Knife holder crate priority:** when holding a knife and the enemy is more than 5 tiles away, the AI always commits to any nearby crate (within knife crate-seek radius) *without* waiting for the state timer. This runs every evaluation tick, making knife-wielding AIs strongly prefer upgrading their weapon over chasing. The timer gate only kicks in once no crate is found nearby.
 

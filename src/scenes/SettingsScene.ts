@@ -4,6 +4,7 @@ import { loadTheme, saveTheme, getColors, Theme } from '../config/Theme';
 
 const DIFFICULTY_KEY   = 'zeroday_difficulty';
 const ATTACK_MODE_KEY  = 'zeroday_attack_mode';
+const MOVE_MODE_KEY    = 'zeroday_move_mode';
 
 export function loadDifficulty(): string {
   return localStorage.getItem(DIFFICULTY_KEY) ?? 'medium';
@@ -18,6 +19,14 @@ export function loadAttackMode(): AttackMode {
 }
 function saveAttackMode(m: AttackMode) {
   localStorage.setItem(ATTACK_MODE_KEY, m);
+}
+
+export type MoveMode = 'held' | 'tap';
+export function loadMoveMode(): MoveMode {
+  return (localStorage.getItem(MOVE_MODE_KEY) ?? 'held') as MoveMode;
+}
+function saveMoveMode(m: MoveMode) {
+  localStorage.setItem(MOVE_MODE_KEY, m);
 }
 
 export class SettingsScene extends Phaser.Scene {
@@ -90,6 +99,17 @@ export class SettingsScene extends Phaser.Scene {
     const atkInit = atkOpts.indexOf(loadAttackMode());
     this.makeCycleToggle(valueX, y, atkOpts.map(s => s.toUpperCase()), atkInit, C,
       (_, val) => saveAttackMode(val.toLowerCase() as AttackMode));
+
+    // ── Move mode row ──────────────────────────────────────────────
+    y += 50;
+    this.add.text(labelX, y, 'MOVEMENT', {
+      fontFamily: '"Press Start 2P"', fontSize: '11px', color: C.subtext,
+    }).setOrigin(0, 0.5);
+
+    const movOpts: MoveMode[] = ['tap', 'held'];
+    const movInit = movOpts.indexOf(loadMoveMode());
+    this.makeCycleToggle(valueX, y, movOpts.map(s => s.toUpperCase()), movInit, C,
+      (_, val) => saveMoveMode(val.toLowerCase() as MoveMode));
 
     // ── Key bindings header + reset button ─────────────────────────
     y += 50;

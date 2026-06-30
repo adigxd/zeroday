@@ -8,6 +8,7 @@ import { Entity, Direction, EntityCallbacks } from '../entities/Entity';
 import { ScoreManager } from '../systems/ScoreManager';
 import { StatsTracker } from '../systems/StatsTracker';
 import { loadDifficulty } from './SettingsScene';
+import { rollDrop } from '../systems/DropSystem';
 import { loadBindings } from '../config/DefaultBindings';
 
 const TILE_COLORS: Record<number, number> = {
@@ -486,7 +487,7 @@ export class GameScene extends Phaser.Scene {
     const { x: ex, y: ey } = this.tileToWorld(epicolCol, epicRow);
 
     // Visual explosion
-    const circle = this.add.circle(ex, ey, TILE_SIZE * 1.2, 0xff4400, 0.8).setDepth(30);
+    const circle = this.add.circle(ex, ey, TILE_SIZE * 0.7, 0xff4400, 0.8).setDepth(30);
     this.tweens.add({
       targets: circle,
       alpha: 0,
@@ -505,9 +506,14 @@ export class GameScene extends Phaser.Scene {
         const t = this.map.tiles[tr]?.[tc];
 
         if (t === T_BLOCK || t === T_CRATE) {
-          this.map.tiles[tr][tc] = T_FLOOR; // only breakable tiles are destroyed
+          const wasCrate = t === T_CRATE;
+          this.map.tiles[tr][tc] = T_FLOOR;
           this.map.blockHp[tr][tc] = 0;
           this.__dirtyTiles.add(`${tc},${tr}`);
+          if (wasCrate) {
+            const drop = rollDrop();
+            if (drop !== 'nothing') this.spawnFloorItem(tc, tr, drop);
+          }
         }
 
         // AoE damage to all entities (including shooter — friendly fire)

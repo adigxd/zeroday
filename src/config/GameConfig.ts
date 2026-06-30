@@ -7,7 +7,7 @@ export function setTileOffsetX(ox: number) { TILE_OFFSET_X = ox; }
 export const CANVAS_W = 1152; // 24 * 48 — max map width
 export const CANVAS_H = 1212; // 24 * 48 + 60 score bar
 export const MOVE_DURATION        = 250; // ms per tile (AI / tween base)
-export const PLAYER_MOVE_DURATION = 63;  // ms per tile for human player (≈ 16 tiles/sec)
+export const PLAYER_MOVE_DURATION = 125; // ms per tile for human player (matches hard AI speed)
 export const BLOCK_HIT_COOLDOWN = 55; // ms between clicks (18 CPS cap)
 
 export const PLAYER_COLORS: Record<string, number> = {
@@ -56,7 +56,7 @@ export const WEAPON_DAMAGES: Record<string, number> = {
   sniper: 70,
   laser:  35,
   bow:    30,
-  rpg:    100,
+  rpg:    75,
 };
 
 export const WEAPON_RANGES: Record<string, number> = {
@@ -69,7 +69,7 @@ export const WEAPON_RANGES: Record<string, number> = {
 };
 
 export const BOW_ARROW_SPEED = 8;  // tiles per second
-export const RPG_SPEED        = 4; // tiles per second
+export const RPG_SPEED        = 5; // tiles per second
 export const RPG_AOE_MULT     = 0.5;
 
 export const DROP_TABLE = [

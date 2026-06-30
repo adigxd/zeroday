@@ -3,7 +3,7 @@ import { Entity, EntityCallbacks, Direction } from './Entity';
 import { PLAYER_MOVE_DURATION, BLOCK_HIT_COOLDOWN } from '../config/GameConfig';
 import { T_BLOCK, T_CRATE, MapData } from '../systems/MapManager';
 import { loadBindings } from '../config/DefaultBindings';
-import { loadAttackMode, AttackMode } from '../scenes/SettingsScene';
+import { loadAttackMode, AttackMode, loadMoveMode, MoveMode } from '../scenes/SettingsScene';
 import { rollDrop } from '../systems/DropSystem';
 
 export class Player extends Entity {
@@ -15,6 +15,9 @@ export class Player extends Entity {
   private bufferedDir: Direction | null = null;
   private bindings    = loadBindings();
   private attackMode: AttackMode = loadAttackMode();
+  private moveMode:   MoveMode   = loadMoveMode();
+  // OS-style key-repeat: delay before held-mode repeat kicks in after initial press
+  private heldRepeatTimer = 0;
 
   constructor(scene: Phaser.Scene, col: number, row: number, offsetY: number, callbacks: EntityCallbacks) {
     super(scene, 'player', 'white', col, row, offsetY, callbacks);
@@ -43,14 +46,24 @@ export class Player extends Entity {
     if (!this.alive) return;
     super.update(delta, map);
 
-    this.moveCooldown  = Math.max(0, this.moveCooldown  - delta);
-    this.blockCooldown = Math.max(0, this.blockCooldown - delta);
+    this.moveCooldown      = Math.max(0, this.moveCooldown      - delta);
+    this.blockCooldown     = Math.max(0, this.blockCooldown     - delta);
+    this.heldRepeatTimer   = Math.max(0, this.heldRepeatTimer   - delta);
 
-    // Buffer movement presses — JustDown ensures one press = one tile
-    if (Phaser.Input.Keyboard.JustDown(this.keys.up))         this.bufferedDir = 'up';
-    else if (Phaser.Input.Keyboard.JustDown(this.keys.down))  this.bufferedDir = 'down';
-    else if (Phaser.Input.Keyboard.JustDown(this.keys.left))  this.bufferedDir = 'left';
-    else if (Phaser.Input.Keyboard.JustDown(this.keys.right)) this.bufferedDir = 'right';
+    // JustDown always fires once on initial press — gives 1-tile precision.
+    // In held mode, isDown repeat only starts after a 200ms initial delay,
+    // matching OS key-repeat behaviour so a short tap never moves more than 1 tile.
+    const justDown = (k: Phaser.Input.Keyboard.Key) => Phaser.Input.Keyboard.JustDown(k);
+    const heldOk   = this.moveMode === 'held' && this.heldRepeatTimer <= 0;
+
+    if      (justDown(this.keys.up))                              { this.bufferedDir = 'up';    this.heldRepeatTimer = 125; }
+    else if (justDown(this.keys.down))                            { this.bufferedDir = 'down';  this.heldRepeatTimer = 125; }
+    else if (justDown(this.keys.left))                            { this.bufferedDir = 'left';  this.heldRepeatTimer = 125; }
+    else if (justDown(this.keys.right))                           { this.bufferedDir = 'right'; this.heldRepeatTimer = 125; }
+    else if (heldOk && this.keys.up.isDown)    this.bufferedDir = 'up';
+    else if (heldOk && this.keys.down.isDown)  this.bufferedDir = 'down';
+    else if (heldOk && this.keys.left.isDown)  this.bufferedDir = 'left';
+    else if (heldOk && this.keys.right.isDown) this.bufferedDir = 'right';
 
     if (this.moveCooldown <= 0 && !this.isMoving() && this.bufferedDir) {
       this.moveTo(this.bufferedDir, map);
