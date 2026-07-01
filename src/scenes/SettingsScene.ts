@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { loadBindings, saveBindings, DEFAULT_BINDINGS, Bindings } from '../config/DefaultBindings';
-import { loadTheme, saveTheme, getColors, Theme } from '../config/Theme';
+import { C } from '../config/Colors';
+import { ensureCamoTextures, makeCamoButton } from '../config/CamoTexture';
 
 const DIFFICULTY_KEY   = 'zeroday_difficulty';
 const ATTACK_MODE_KEY  = 'zeroday_attack_mode';
@@ -34,97 +35,72 @@ export class SettingsScene extends Phaser.Scene {
   private listening: keyof Bindings | null = null;
   private listeningText?: Phaser.GameObjects.Text;
   private bindingTexts: Partial<Record<keyof Bindings, Phaser.GameObjects.Text>> = {};
-  private theme!: Theme;
 
   constructor() { super('SettingsScene'); }
 
   create() {
     this.bindings = loadBindings();
-    this.theme    = loadTheme();
+    ensureCamoTextures(this);
 
-    const C = getColors(this.theme);
     const { width, height } = this.scale;
     const cx = width / 2;
 
     const labelX = cx - 200;
     const valueX = cx + 130;
 
-    this.add.rectangle(0, 0, width, height, C.bgHex).setOrigin(0);
+    this.add.tileSprite(0, 0, width, height, 'camo_bg').setOrigin(0);
 
     this.add.text(cx, 40, 'SETTINGS', {
-      fontFamily: '"Press Start 2P"', fontSize: '28px', color: C.text,
+      fontFamily: '"Press Start 2P"', fontSize: '32px', color: C.text,
+      stroke: '#000000', strokeThickness: 6,
     }).setOrigin(0.5);
 
     let y = 100;
 
-    // ── Theme row ──────────────────────────────────────────────────
-    this.add.text(labelX, y, 'THEME', {
-      fontFamily: '"Press Start 2P"', fontSize: '11px', color: C.subtext,
-    }).setOrigin(0, 0.5);
-
-    const icon = this.theme === 'light' ? '☀' : '☽';
-    const themeBg = this.add.rectangle(valueX, y, 50, 34, C.btnBg)
-      .setStrokeStyle(1, C.btnStroke).setInteractive({ useHandCursor: true });
-    const themeIcon = this.add.text(valueX, y, icon, {
-      fontFamily: '"Press Start 2P"', fontSize: '16px', color: C.btnText,
-    }).setOrigin(0.5);
-    themeBg.on('pointerover', () => themeBg.setFillStyle(C.btnHover));
-    themeBg.on('pointerout',  () => themeBg.setFillStyle(C.btnBg));
-    themeBg.on('pointerdown', () => {
-      const newTheme = this.theme === 'light' ? 'dark' : 'light';
-      saveTheme(newTheme);
-      document.body.style.background = newTheme === 'dark' ? '#111111' : '#f0ede6';
-      this.scene.restart();
-    });
-    void themeIcon;
-
     // ── Difficulty row ─────────────────────────────────────────────
-    y += 50;
     this.add.text(labelX, y, 'DIFFICULTY', {
-      fontFamily: '"Press Start 2P"', fontSize: '11px', color: C.subtext,
+      fontFamily: '"Press Start 2P"', fontSize: '13px', color: C.subtext,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0, 0.5);
 
     const diffOpts = ['easy', 'medium', 'hard'];
     const diffInit = diffOpts.indexOf(loadDifficulty());
-    this.makeCycleToggle(valueX, y, diffOpts.map(s => s.toUpperCase()), diffInit, C,
+    this.makeCycleToggle(valueX, y, diffOpts.map(s => s.toUpperCase()), diffInit,
       (_, val) => saveDifficulty(val.toLowerCase()));
 
     // ── Attack mode row ────────────────────────────────────────────
     y += 50;
     this.add.text(labelX, y, 'ATTACK', {
-      fontFamily: '"Press Start 2P"', fontSize: '11px', color: C.subtext,
+      fontFamily: '"Press Start 2P"', fontSize: '13px', color: C.subtext,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0, 0.5);
 
     const atkOpts: AttackMode[] = ['held', 'tap'];
     const atkInit = atkOpts.indexOf(loadAttackMode());
-    this.makeCycleToggle(valueX, y, atkOpts.map(s => s.toUpperCase()), atkInit, C,
+    this.makeCycleToggle(valueX, y, atkOpts.map(s => s.toUpperCase()), atkInit,
       (_, val) => saveAttackMode(val.toLowerCase() as AttackMode));
 
     // ── Move mode row ──────────────────────────────────────────────
     y += 50;
     this.add.text(labelX, y, 'MOVEMENT', {
-      fontFamily: '"Press Start 2P"', fontSize: '11px', color: C.subtext,
+      fontFamily: '"Press Start 2P"', fontSize: '13px', color: C.subtext,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0, 0.5);
 
     const movOpts: MoveMode[] = ['tap', 'held'];
     const movInit = movOpts.indexOf(loadMoveMode());
-    this.makeCycleToggle(valueX, y, movOpts.map(s => s.toUpperCase()), movInit, C,
+    this.makeCycleToggle(valueX, y, movOpts.map(s => s.toUpperCase()), movInit,
       (_, val) => saveMoveMode(val.toLowerCase() as MoveMode));
 
     // ── Key bindings header + reset button ─────────────────────────
     y += 50;
     this.add.text(labelX, y, 'KEY BINDINGS', {
-      fontFamily: '"Press Start 2P"', fontSize: '14px', color: C.subtext,
+      fontFamily: '"Press Start 2P"', fontSize: '16px', color: C.subtext,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0, 0.5);
 
-    const resetBg = this.add.rectangle(valueX, y, 120, 26, C.btnBg)
-      .setStrokeStyle(1, C.btnStroke).setInteractive({ useHandCursor: true });
-    const resetT = this.add.text(valueX, y, 'RESET', {
-      fontFamily: '"Press Start 2P"', fontSize: '9px', color: C.subtext,
-    }).setOrigin(0.5);
-    resetBg.on('pointerover', () => { resetBg.setFillStyle(C.btnHover); resetT.setAlpha(0.6); });
-    resetBg.on('pointerout',  () => { resetBg.setFillStyle(C.btnBg);    resetT.setAlpha(1); });
-    resetBg.on('pointerdown', () => this.resetToDefaults());
+    makeCamoButton(this, valueX, y, 120, 28, 'RESET', '11px', C.subtext, C.btnStroke,
+      () => this.resetToDefaults());
 
     // ── Rebindable rows ────────────────────────────────────────────
     const actions: (keyof Bindings)[] = ['up','down','left','right','break1','break2','attack'];
@@ -133,11 +109,13 @@ export class SettingsScene extends Phaser.Scene {
     actions.forEach((action, i) => {
       const by = y + 40 + i * 36;
       this.add.text(labelX, by, labels[i], {
-        fontFamily: '"Press Start 2P"', fontSize: '11px', color: C.subtext,
+        fontFamily: '"Press Start 2P"', fontSize: '13px', color: C.subtext,
+        stroke: '#000000', strokeThickness: 4,
       }).setOrigin(0, 0.5);
 
       const bt = this.add.text(valueX, by, this.bindings[action], {
-        fontFamily: '"Press Start 2P"', fontSize: '12px', color: C.text,
+        fontFamily: '"Press Start 2P"', fontSize: '14px', color: C.text,
+        stroke: '#000000', strokeThickness: 4,
       }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
       bt.on('pointerdown', () => this.startListening(action, bt));
@@ -149,15 +127,17 @@ export class SettingsScene extends Phaser.Scene {
     // ── ESC / Pause row (non-rebindable) ───────────────────────────
     const escRowY = y + 40 + actions.length * 36;
     this.add.text(labelX, escRowY, 'Pause', {
-      fontFamily: '"Press Start 2P"', fontSize: '11px', color: C.dim,
+      fontFamily: '"Press Start 2P"', fontSize: '13px', color: C.dim,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0, 0.5);
     this.add.text(valueX, escRowY, 'ESC', {
-      fontFamily: '"Press Start 2P"', fontSize: '12px', color: C.dim,
+      fontFamily: '"Press Start 2P"', fontSize: '14px', color: C.dim,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
 
     // ── Bottom buttons ─────────────────────────────────────────────
     const backY = height - 50;
-    this.makeButton(cx, backY, '← BACK', C, () => {
+    this.makeButton(cx, backY, '← BACK', () => {
       saveBindings(this.bindings);
       this.scene.start('MenuScene');
     });
@@ -188,22 +168,24 @@ export class SettingsScene extends Phaser.Scene {
     x: number, y: number,
     values: string[],
     initIdx: number,
-    C: ReturnType<typeof getColors>,
     onChange: (idx: number, value: string) => void,
   ) {
     let idx = initIdx;
     const PAD = 14; // px gap between text edge and arrow centre
 
-    const valText = this.add.text(x, y, values[idx], {
-      fontFamily: '"Press Start 2P"', fontSize: '12px', color: C.text,
+    const valText = this.add.text(x, y + 2, values[idx], {
+      fontFamily: '"Press Start 2P"', fontSize: '14px', color: C.text,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
 
     const lArrow = this.add.text(0, y, '◀', {
-      fontFamily: '"Press Start 2P"', fontSize: '12px', color: C.dim,
+      fontFamily: '"Press Start 2P"', fontSize: '14px', color: C.dim,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     const rArrow = this.add.text(0, y, '▶', {
-      fontFamily: '"Press Start 2P"', fontSize: '12px', color: C.dim,
+      fontFamily: '"Press Start 2P"', fontSize: '14px', color: C.dim,
+      stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     const reposition = () => {
@@ -270,13 +252,7 @@ export class SettingsScene extends Phaser.Scene {
     this.listeningText = undefined;
   }
 
-  private makeButton(x: number, y: number, label: string, C: ReturnType<typeof getColors>, cb: () => void) {
-    const bw = 200, bh = 40;
-    const bg = this.add.rectangle(x, y, bw, bh, C.btnBg).setStrokeStyle(2, C.btnStroke).setInteractive({ useHandCursor: true });
-    const t = this.add.text(x, y, label, { fontFamily: '"Press Start 2P"', fontSize: '13px', color: C.btnText }).setOrigin(0.5);
-    bg.on('pointerover', () => bg.setFillStyle(C.btnHover));
-    bg.on('pointerout',  () => bg.setFillStyle(C.btnBg));
-    bg.on('pointerdown', cb);
-    void t;
+  private makeButton(x: number, y: number, label: string, cb: () => void) {
+    makeCamoButton(this, x, y, 200, 44, label, '15px', C.btnText, C.btnStroke, cb);
   }
 }

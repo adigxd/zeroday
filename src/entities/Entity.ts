@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { TILE_SIZE, TILE_OFFSET_X, MOVE_DURATION, PLAYER_COLORS, WEAPON_DAMAGES, WEAPON_COOLDOWNS, GUN_LINE_COLORS, WEAPON_RANGES, BOW_ARROW_SPEED, RPG_SPEED, RPG_AOE_MULT } from '../config/GameConfig';
+import { TILE_SIZE, TILE_OFFSET_X, MOVE_DURATION, PLAYER_COLORS, WEAPON_DAMAGES, WEAPON_COOLDOWNS, GUN_LINE_COLORS, WEAPON_RANGES, BOW_ARROW_SPEED, RPG_SPEED } from '../config/GameConfig';
 import { WeaponId } from '../weapons/Weapon';
 import { T_HOLE, T_SOLID, T_BLOCK, T_CRATE, MapData } from '../systems/MapManager';
 import { rollDrop } from '../systems/DropSystem';
@@ -44,6 +44,7 @@ export class Entity {
   weapon: WeaponId = 'knife';
   shieldHp = 0;
   alive = true;
+  forceIdleHands = false; // set true on dummies to always use idle hand positioning
 
   protected scene: Phaser.Scene;
   protected callbacks: EntityCallbacks;
@@ -56,7 +57,7 @@ export class Entity {
   shieldAura!: Phaser.GameObjects.Arc;
   healthBar?:  Phaser.GameObjects.Graphics;
 
-  private attackCooldown = 0;
+  protected attackCooldown = 0;
   private handBobTime = 0;
   private moving = false;
   private offsetY = 0; // score bar height, added externally
@@ -133,6 +134,12 @@ export class Entity {
     this.row = newRow;
     this.moving = true;
 
+    // Kill any active attack-lunge tweens before starting movement to prevent
+    // two tweens fighting over body.x/y
+    this.scene.tweens.killTweensOf(this.body);
+    this.scene.tweens.killTweensOf(this.leftHand);
+    this.scene.tweens.killTweensOf(this.rightHand);
+
     const { x, y } = this.tileToWorld(newCol, newRow);
     const duration = this.moveDuration;
 
@@ -182,7 +189,6 @@ export class Entity {
 
   attack(map: MapData) {
     if (this.attackCooldown > 0) return;
-    if (this.isMoving()) return; // wait until body tween completes so logical pos matches visual
     this.attackCooldown = WEAPON_COOLDOWNS[this.weapon] ?? 500;
 
     const isMelee = ['knife','mace','sword'].includes(this.weapon);
@@ -223,7 +229,7 @@ export class Entity {
       }
     }
 
-    this.animateAttack();
+    if (!this.moving) this.animateAttack();
     this.showMeleeSwing();
   }
 
@@ -282,42 +288,56 @@ export class Entity {
     }
 
     if (this.weapon === 'bow' || this.weapon === 'rpg') {
-      this.callbacks.spawnArrow(this.col, this.row, this.facing, damage, this.id, this.weapon === 'rpg');
+      this.callbacks.spawnArrow(this.col + delta.dc, this.row + delta.dr, this.facing, damage, this.id, this.weapon === 'rpg');
       return;
     }
 
-    // Instant gun — trace from the first tile ahead
+    // Instant gun — rifle pierces 1 (20→10), sniper pierces 2 (70→50→20), others stop at first hit
     let hitCol = this.col + delta.dc;
     let hitRow = this.row + delta.dr;
     let distance = 0;
-    let hitEntity: Entity | null = null;
+    let lastHitEntity: Entity | null = null;
+    const maxPierce = this.weapon === 'sniper' ? 2 : this.weapon === 'rifle' ? 1 : 0;
+    let pierced = 0;
 
+    const getPierceDamage = (p: number): number => {
+      if (this.weapon === 'sniper') return p === 0 ? 70 : p === 1 ? 50 : 20;
+      if (this.weapon === 'rifle')  return p === 0 ? damage : 10;
+      return damage;
+    };
+
+    const entities = this.callbacks.getAllEntities();
     while (distance < maxRange) {
       const tile = map.tiles[hitRow]?.[hitCol];
       if (tile === undefined || tile === T_SOLID || tile === T_BLOCK || tile === T_CRATE) break;
 
-      const entities = this.callbacks.getAllEntities();
-      hitEntity = entities.find(e => e.alive && e !== this && e.col === hitCol && e.row === hitRow) ?? null;
-      if (hitEntity) break;
+      const e = entities.find(e => e.alive && e !== this && e.col === hitCol && e.row === hitRow) ?? null;
+      if (e) {
+        lastHitEntity = e;
+        this.dealDamage(e, getPierceDamage(pierced));
+        if (pierced >= maxPierce) break;
+        pierced++;
+      }
 
       hitCol += delta.dc;
       hitRow += delta.dr;
       distance++;
     }
 
-    this.drawGunLine(hitCol, hitRow, hitEntity !== null);
-    if (hitEntity) this.dealDamage(hitEntity, damage);
+    this.drawGunLine(this.col + delta.dc, this.row + delta.dr, hitCol, hitRow, delta, lastHitEntity !== null);
   }
 
   private fireLaser(map: MapData, initialDelta: { dr: number; dc: number }, damage: number) {
     const bounceLeft = Math.random() < 0.5;
     const entities = this.callbacks.getAllEntities();
-    const linePoints: { x: number; y: number }[] = [this.tileToWorld(this.col, this.row)];
+    const linePoints: { x: number; y: number }[] = [];
 
-    let col = this.col;
-    let row = this.row;
+    let col = this.col + initialDelta.dc;
+    let row = this.row + initialDelta.dr;
     let dir = { ...initialDelta };
     let bounced = false;
+
+    linePoints.push(this.tileToWorld(col, row));
 
     // Advance step by step; stop at the last valid tile before any obstacle
     while (true) {
@@ -353,13 +373,22 @@ export class Entity {
     this.drawLaserLine(linePoints);
   }
 
-  private drawGunLine(endCol: number, endRow: number, _hit: boolean) {
+  private drawGunLine(startCol: number, startRow: number, endCol: number, endRow: number, delta: { dc: number; dr: number }, hit: boolean) {
     const lineColor = GUN_LINE_COLORS[this.weapon] ?? 0xffffff;
     const cooldown = WEAPON_COOLDOWNS[this.weapon] ?? 500;
     const fadeDuration = cooldown * 0.85;
 
-    const { x: x1, y: y1 } = this.tileToWorld(this.col, this.row);
-    const { x: x2, y: y2 } = this.tileToWorld(endCol, endRow);
+    const { x: x1, y: y1 } = this.tileToWorld(startCol, startRow);
+    // When hitting an entity, draw to its tile center.
+    // Otherwise, snap to the entry face of the obstacle/boundary tile so the line
+    // touches the wall surface without visually entering it.
+    let x2: number, y2: number;
+    if (hit) {
+      ({ x: x2, y: y2 } = this.tileToWorld(endCol, endRow));
+    } else {
+      x2 = endCol * TILE_SIZE + TILE_OFFSET_X + TILE_SIZE / 2 - delta.dc * TILE_SIZE / 2;
+      y2 = endRow * TILE_SIZE + this.offsetY  + TILE_SIZE / 2 - delta.dr * TILE_SIZE / 2;
+    }
 
     const g = this.scene.add.graphics().setDepth(15);
     g.lineStyle(2, lineColor, 1);

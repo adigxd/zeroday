@@ -4,22 +4,21 @@ import { SettingsScene } from './scenes/SettingsScene';
 import { GameScene }     from './scenes/GameScene';
 import { PauseScene }    from './scenes/PauseScene';
 import { StatsScene }    from './scenes/StatsScene';
+import { GalleryScene }  from './scenes/GalleryScene';
 import { AITestCoordinator } from './test/AITestCoordinator';
 import { CANVAS_W, CANVAS_H } from './config/GameConfig';
-import { loadTheme, getColors } from './config/Theme';
+
 
 const IS_TEST = import.meta.env.MODE === 'test' && new URLSearchParams(location.search).has('test');
-
-const _initBg = getColors(loadTheme()).bg;
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width:  CANVAS_W,
   height: CANVAS_H,
-  backgroundColor: _initBg,
+  backgroundColor: '#000000',
   scene: IS_TEST
-    ? [AITestCoordinator, GameScene, SettingsScene, PauseScene, StatsScene]
-    : [MenuScene, SettingsScene, GameScene, PauseScene, StatsScene],
+    ? [AITestCoordinator, GameScene, SettingsScene, PauseScene, StatsScene, GalleryScene]
+    : [MenuScene, SettingsScene, GameScene, PauseScene, StatsScene, GalleryScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

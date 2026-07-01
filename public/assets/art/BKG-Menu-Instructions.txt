@@ -1,0 +1,3 @@
+Quantize: 	8 	0
+Edge Detect: 	0.25 	0.00 	Sobel 	Overlay
+Vignette: 	0.38 	1.00

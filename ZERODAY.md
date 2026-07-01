@@ -44,7 +44,8 @@ Points are tracked at the top of the screen for the human player and each AI, pe
      ├──→ [Play] → [Game Screen] ──→ [Round End Popup] ──→ next round [Game Screen]
      │                                                └──→ [Quit to Menu]
      ├──→ [Settings Screen] → back to [Menu]
-     └──→ [Stats Screen] → back to [Menu]
+     ├──→ [Stats Screen] → back to [Menu]
+     └──→ [Gallery] → [Gallery Scene] ──→ [ESC] → [Menu Screen]
 
 During Game:
      [ESC] → [Pause Screen] → Resume → [Game Screen]
@@ -62,11 +63,13 @@ During Game:
 - **Player count field** — displays `2`, `3`, or `4` with up/down arrow buttons (range: 2–4); total combatants (1 human + 1–3 AI)
 - **Settings** button → Settings Screen
 - **Stats** button → Stats Screen
-- Background: subtle animated tile grid or looping map preview
+- **Gallery** button → Gallery Scene
+- Buttons are stacked close together (56px center-to-center, ~12px gap between edges)
+- Background: art image (menu_bg); desaturates on title hover
+- All buttons use pixelated dark-brown camo texture with warm beige text
 
 ### 3.2 Settings Screen
 
-- **Theme** — toggle button showing ☀ (light) or ☽ (dark); clicking switches theme and immediately restarts the settings scene. All UI scenes (Menu, Settings, Stats, Pause) read the stored theme on create.
 - **AI Difficulty** — ◀/▶ cycle toggle: Easy / Medium / Hard (affects AI block-breaking CPS and behavior; see §6.2)
 - **Attack** — ◀/▶ cycle toggle: Held (hold key to auto-fire at weapon cooldown rate) / Tap (one press = one shot). Default: Held.
 - **Movement** — ◀/▶ cycle toggle: Held (hold key = continuous movement at move-cooldown rate, default) / Tap (one keypress = one tile).
@@ -99,31 +102,67 @@ During Game:
 - Pre-game **3 → 2 → 1 → GO!** countdown popup (input locked during countdown)
 - HUD:
   - Health bars appear **above each character** when they've taken damage and persist until death
-  - Player indicator (e.g. subtle white glow or name tag on the human player)
+  - **"YOU" indicator:** a bobbing label ("YOU" + arrow) in `#eeeeee` shown **only during the 3→2→1→GO! countdown** so the player can identify their character before the round starts. If the player spawns in the **top half** of the map the indicator sits **below** (▲ pointing up toward player); if in the **bottom half** it sits **above** (▼ pointing down). Fades out when the countdown ends and the game becomes active.
   - Current weapon icon shown in a corner HUD slot (small, unobtrusive)
 - On player death: brief flash / death animation, player is removed from grid
-- Round ends when one or zero entities remain → brief **round-end popup** (who won or DRAW if all died simultaneously, top damage dealer) → press Attack to start next round on a new random map, or ESC to quit to menu
-- **Player death mid-round:** AIs keep fighting. A **Skip Round** button appears at the bottom of the screen. Clicking Skip awards a point to a **randomly chosen alive AI** (simulating a winner), then ends the round. If the player watches and an AI wins normally, the AI earns the point as usual.
+- Round ends when one or zero entities remain → brief **round-end popup** (who won or DRAW if all died simultaneously, top damage dealer if still alive) → press Attack to start next round on a new random map, or ESC to quit to menu
+- **Player death mid-round:** AIs keep fighting. A **Skip Round** button appears at the bottom of the screen. Clicking Skip (or pressing `ESC`) awards a point to the **alive entity with the most damage dealt this round** (random tiebreak among tied), then ends the round. If the player watches and an AI wins normally, the AI earns the point as usual.
 
 ### 3.5 Round End Popup
 
 - Shown inline over the game after each round (not a separate screen)
-- Displays: who won the round (or **DRAW** if all remaining players died simultaneously), who dealt the most damage that round
+- Displays: who won the round (or **DRAW** if all remaining players died simultaneously), who dealt the most damage that round (shown even if dead; player always shown if tied with anyone)
+- **Current Winstreak** displayed (yellow text) when the player's streak is ≥ 1
 - **Next Round:** press the Attack hotkey (default `Space`)
 - **Quit to Menu:** press `ESC`
 - Round points: 1 point awarded to the last survivor; **no point awarded on a draw**
 
 ### 3.6 Stats Screen
 
-Persistent lifetime stats tracked in localStorage:
+Stats are split into two sections: **Singleplayer** (tracked, persisted) and **Multiplayer** (placeholders, not yet implemented).
 
-| Stat            | Description                          |
-|-----------------|--------------------------------------|
-| Blocks Broken   | Total blocks destroyed across all games |
-| Shots Fired     | Total projectile attacks fired       |
-| Kills           | Total enemy kills                    |
-| Deaths          | Total times the human player died    |
-| Item Pickups    | Total weapons/items picked up        |
+**Singleplayer** (localStorage):
+
+| Stat                     | Description                                          |
+|--------------------------|------------------------------------------------------|
+| Kills                    | Total enemy kills                                    |
+| Deaths                   | Total times the human player died                    |
+| Blocks Broken            | Total blocks destroyed across all games              |
+| Shots Fired              | Total projectile attacks fired                       |
+| Item Pickups             | Total weapons/items picked up                        |
+| Max Winstreak (Easy)     | Highest consecutive round wins on Easy difficulty    |
+| Max Winstreak (Medium)   | Highest consecutive round wins on Medium difficulty  |
+| Max Winstreak (Hard)     | Highest consecutive round wins on Hard difficulty    |
+
+**Multiplayer** (placeholder — coming when multiplayer is implemented):
+- Wins, Losses, Max Winstreak (no per-difficulty label)
+
+**Winstreak tracking:** the current winstreak is session-only — it increments when the player wins a round and resets to 0 on a loss. Going to the main menu discards the current streak (it is not persisted). The *max* winstreak per difficulty is persisted in localStorage and only updated if the current streak exceeds the stored max.
+
+### 3.7 Gallery Scene
+
+A dedicated weapon testing range accessible from the main menu via **GALLERY**.
+
+**Layout:** horizontal scrolling hallway, 60×9 tiles. Wider than the viewport — camera follows the player horizontally. Center aisle is row 4. Player starts at the right end and walks left to engage dummies at increasing range.
+
+**Player spawn:** col 58, row 4 (right end of centre aisle), starts with knife.
+
+**Weapons & items:** all 11 pickups in two offset rows near the player spawn:
+- **Row 2 (above centre):** knife (46), mace (48), sword (50), pistol (52), rifle (54), sniper (56)
+- **Row 6 (below centre):** laser (47), bow (49), rpg (51), medkit (53), shield (55)
+
+When the player picks up an item and walks off the tile, the item **immediately respawns**.
+
+**Dummies:** four tan-coloured character dummies at row 4, cols 10 / 20 / 30 / 40 (distances 48 / 38 / 28 / 18 tiles from the player):
+- 100 HP, visible health bar (same as real game characters)
+- When killed, respawn at the same tile after **3 seconds**
+- Use idle hand animation regardless of player weapon state
+
+**Damage numbers:** floating damage numbers appear on every hit (both in gallery and during real matches). Color interpolates yellow→red by damage magnitude; font size scales with damage.
+
+**Dummy sprites:** tan character sprite (placeholder — no dedicated dummy art yet).
+
+**Exit:** `ESC` returns to the Menu Screen. No score tracking in gallery.
 
 ---
 
@@ -135,7 +174,7 @@ Persistent lifetime stats tracked in localStorage:
 - Each tile is either: **floor**, **solid wall**, **breakable block**, or **crate**
 - Players occupy exactly one tile at a time; no stopping mid-tile
 - Movement is **tile-to-tile**: pressing a direction instantly commits to moving to the adjacent tile center; tween the visual position smoothly between tiles
-- Movement speed: **player — one tile per 63ms (~16 tiles/sec)**; **AI — Easy: 250ms, Medium: 187ms, Hard: 125ms (~8 tiles/sec, half player speed)**
+- Movement speed: **player — one tile per 138ms (~7.2 tiles/sec)**; **AI — Easy: 250ms, Medium: 187ms, Hard: 150ms**
 - A player **cannot move into a tile occupied by another player or a wall/block**
 - Movement uses the 4 directional hotkeys; **diagonal movement is not supported**
 - The player's **facing direction** = the direction of their last movement input; this determines attack direction for all weapons
@@ -147,7 +186,8 @@ Persistent lifetime stats tracked in localStorage:
   - Alternating between `Break 1` and `Break 2` also works for players who prefer that rhythm
   - **CPS cap: 18 hits/sec** (minimum 55ms between hits)
   - The player must be **adjacent and facing** the block to break it
-  - **No weapon attack (melee or ranged) can damage or break blocks** — only the break keys
+  - **Attack-key shortcut:** if the tile directly in front is a T_BLOCK or T_CRATE, pressing the Attack hotkey is treated as a break request (subject to the same 55ms cooldown), regardless of which weapon is held. This always requires a **fresh tap** — holding the attack key does not auto-repeat the break, matching the tap-to-break feel of the dedicated break keys. If a T_SOLID wall is directly in front, the attack key does nothing (no weapon fires). This only applies to the tile directly in front — not diagonals.
+  - Ranged weapons still cannot fire if a solid/block/crate is directly in front (unchanged behavior)
 - Blocks have HP values:
   - Standard breakable block: 3 hits
   - Crate: 2 hits (easier, reward is worth it)
@@ -164,6 +204,9 @@ Persistent lifetime stats tracked in localStorage:
   - Leaves a thin colored line from shooter to target (or max range) that fades out just before the next shot's cooldown ends (duration = weapon cooldown - small margin)
   - Line color is weapon-specific (see §5.2)
   - Blocked by walls and breakable blocks (does not pass through)
+  - **Pistol:** stops at the first character hit (no piercing)
+  - **Rifle:** pierces through 1 character (full 20 dmg), then hits the next for 10 dmg and stops
+  - **Sniper:** pierces through 2 characters (70 → 50 → 20 dmg per successive hit)
 - **Laser Gun:**
   - Instant, infinite range
   - Travels tile by tile; stops at the **tile center just before** any obstacle (wall/block/crate/border)
@@ -174,12 +217,12 @@ Persistent lifetime stats tracked in localStorage:
   - Cannot fire if an obstacle is directly in front
 - **Bow:**
   - Arrow has **actual travel time** — moves tile by tile at 8 tiles/sec
-  - Blocked by walls and blocks
+  - Stops in the tile immediately before any non-hole obstacle (wall, block, crate, map boundary)
   - Does not pass through players — stops on first player hit
 - **RPG:**
-  - Rocket has travel time at **4 tiles/sec**, max range **6 tiles**
-  - Deals **100 damage** on direct hit (one-shots most enemies)
-  - On impact (obstacle, entity, or range expiry): explodes, breaking all **8 surrounding blocks/crates** and dealing **50 AoE damage** to any entity in those tiles (including the impact tile itself)
+  - Rocket has travel time at **5 tiles/sec**, max range **6 tiles**
+  - Deals **100 damage** on direct hit
+  - On impact (obstacle or range expiry): explodes at the last valid tile before the obstacle, breaking all **8 surrounding blocks/crates** and dealing **45 AoE damage** to any entity in those surrounding tiles
   - **Friendly fire:** AoE can hit the shooter
   - Cannot fire if an obstacle is directly in front
 - **All ranged weapons** are blocked if an object (wall/block/crate) is directly in front — floor tiles and holes do not block
@@ -223,12 +266,12 @@ Diagonal hits for Sword and Mace: if facing Up, diagonals are Up-Left and Up-Rig
 
 | Weapon     | Damage   | Fire Rate  | Visual Line Color  | Notes                                                                 |
 |------------|----------|------------|--------------------|-----------------------------------------------------------------------|
-| Pistol     | 25       | Medium     | Yellow-white       | 8-tile max range; blocked by walls/blocks                             |
-| Rifle      | 20       | Fast       | Cyan               | 14-tile max range; blocked by walls/blocks; does NOT break blocks     |
-| Sniper     | 70       | Very Slow  | Bright white       | Full-map range; blocked by walls/blocks; one-shot punish              |
-| Laser Gun  | 35       | Slow       | Green              | Full-map, instant, passes through players, bounces 1 wall; see §4.3  |
+| Pistol     | 25       | Medium     | Yellow-white       | 8-tile max range; blocked by walls/blocks; no piercing                |
+| Rifle      | 20 / 10  | Fast       | Cyan               | 11-tile max range; pierces 1 character (20 dmg, then 10 dmg)         |
+| Sniper     | 70/50/20 | Very Slow  | Bright white       | Full-map range; pierces 2 characters (70 → 50 → 20 dmg)             |
+| Laser Gun  | 25       | Slow       | Green              | Full-map, instant, pierces all characters, bounces 1 wall; see §4.3  |
 | Bow        | 30       | Medium     | N/A (arrow sprite) | Arrow travels 8 tiles/sec; blocked by walls/blocks; stops on first player hit |
-| RPG        | 100 (50 AoE) | Very Slow | N/A (rocket sprite)| 4 tiles/sec, 6-tile range, explodes on impact — see §4.3          |
+| RPG        | 100 (45 AoE) | Very Slow | N/A (rocket sprite)| 5 tiles/sec, 6-tile range; direct hit = 100 dmg; AoE = 45 dmg to surrounding tiles |
 
 **Gun visual effect:** a thin line rendered from shooter to impact point, fading to nothing over a duration of `(weapon cooldown × 0.85)` seconds. Line color per weapon as above.
 
@@ -299,9 +342,12 @@ Difficulty is set in Settings and applies uniformly to all AIs in the session.
 | Parameter                          | Easy        | Medium      | Hard        |
 |------------------------------------|-------------|-------------|-------------|
 | Block-breaking CPS                 | 4           | 9           | 16          |
+| Attack cooldown multiplier         | ×2.0        | ×1.5        | ×1.0        |
 | Move speed (ms per tile)           | 250ms       | 187ms       | 150ms       |
 | Move hesitation (per step)         | 35%         | 12%         | 0%          |
 | Flee HP threshold                  | 12          | 18          | Never       |
+| Flee max duration                  | 5000ms      | 5000ms      | N/A         |
+| Flee re-entry cooldown             | 5000ms      | 5000ms      | N/A         |
 | Chase range (tiles, Manhattan)     | Unlimited   | Unlimited   | Unlimited   |
 | Crate-seek probability             | 35%         | 55%         | 75%         |
 | Crate-seek search radius           | 4 tiles     | 8 tiles     | 12 tiles    |
@@ -331,7 +377,7 @@ Difficulty is set in Settings and applies uniformly to all AIs in the session.
 
 **Crate-breaking interrupt:** if an enemy closes to within 3 tiles while the AI is in `seek_crate`, it immediately abandons the crate and switches to `chase`. This threshold is the same across all difficulties — movement and breaking speed already differentiate difficulty.
 
-**Breakable tile validation:** `seek_crate` accepts both T_CRATE and T_BLOCK as valid targets (both are breakable). If the targeted tile is gone or was never breakable, the AI re-searches within 12 tiles; if nothing is found, it returns to `wander`.
+**Breakable tile validation:** `seek_crate` only accepts T_CRATE as a valid target — plain breakable blocks (T_BLOCK) are ignored. If the targeted crate is gone, the AI re-searches within 12 tiles (crates only); if none is found, it returns to `wander`.
 
 **Opportunistic crate distraction:** during `chase` and `wander` states, if a crate is within radius (Easy: 2 tiles, Medium/Hard: 3 tiles) and the state timer has cooled, the AI rolls a per-difficulty chance to fully commit to breaking that crate — entering `seek_crate` state and pathfinding to it. Easy 18%, Medium 42%, Hard 72%. Not active during `attack`, `flee`, `seek_crate`, or `seek_item`.
 
@@ -339,7 +385,7 @@ Difficulty is set in Settings and applies uniformly to all AIs in the session.
 
 **Floor item (SeekItem) evaluation:** medkit priority is checked every frame when HP < 80 and bypasses the state timer. Weapon seeking is checked on state-timer expiry. The AI validates the target each tick and falls back to wander if the item disappears.
 
-**Flee behavior:** if a floor medkit exists within 6 tiles, the AI pathfinds to it instead of running away. Otherwise it moves opposite the target; if blocked, tries a random direction. Adjacent crates are broken while fleeing as a secondary medkit source.
+**Flee behavior:** if a floor medkit exists within 6 tiles, the AI pathfinds to it instead of running away. Otherwise it moves opposite the target; if blocked, tries a random direction. Adjacent crates are broken while fleeing as a secondary medkit source. Flee is capped at **5 seconds** — if still below the HP threshold after 5s, the AI exits flee and cannot re-enter for another **5 seconds** (cooldown also starts if HP naturally recovers above the threshold mid-flee).
 
 **Chase behavior:** all weapons use the same BFS-to-target chase. If BFS fails (path fully blocked), the AI checks the tile in the rough direction of the target — if it's T_BLOCK or T_CRATE it breaks it; otherwise it falls back to wander. Melee weapons attack when adjacent (dist=1). Ranged weapons rely entirely on opportunistic fire to shoot when the opportunity arises.
 
@@ -347,7 +393,7 @@ Difficulty is set in Settings and applies uniformly to all AIs in the session.
 
 **Bullet dodging:** each update tick the AI checks all live projectiles (arrows, RPG rockets) not fired by itself. If a projectile is in the same row or column and within 5 tiles and heading toward the AI, the AI attempts to step perpendicular (randomly chooses up/down or left/right first). The dodge fires before the state machine so it takes priority. Dodge success is gated by a per-difficulty probability roll: Easy 22%, Medium 52%, Hard 82%.
 
-**Position/attack sync:** entities do not fire while a movement tween is in progress (`isMoving() === true`). This ensures logical tile position (col/row) matches the visual body position before any attack is resolved. The health bar is rendered at the visual body position (`body.x/y`) rather than the logical tile center, so it tracks smoothly through movement tweens.
+**Position/attack sync:** entities can attack while moving. Damage is resolved against the logical tile position (col/row) immediately. The melee lunge animation (`animateAttack`) is suppressed during movement to prevent tween conflicts, but the swing flash and damage still register. The health bar is rendered at the visual body position (`body.x/y`) so it tracks smoothly through movement tweens.
 
 
 ---
@@ -402,7 +448,7 @@ Rectangle maps constrain the W:H ratio to ≤ 1.8:1.
 
 - **Perspective:** top-down 2D, no isometric tilt
 - **Not pixel art** — proper sprites with smooth edges; think simple vector-ish or hand-drawn digital art
-- **Palette:** dark, desaturated background tiles with punchy, saturated character colors
+- **Palette:** dark browns, beiges, and tans — desaturated, swampy, murky. Non-gameplay UI scenes use a near-black procedural pixelated camo texture as background; buttons across all scenes use a dark olive-brown camo texture. Text is warm tan/off-white.
 - Characters are a **rounded rectangle body** with **2 beady eyes** and **2 circle hands**
 
 ### 8.2 Character Sprites & Animations
@@ -651,6 +697,48 @@ zeroday/
 
 ---
 
-## 13. Open Questions
+## 13. UI Theme System
+
+UI appearance is driven by a **UITheme** object defined in `src/config/UITheme.ts`. The active theme is resolved once at game load from `localStorage` key `zeroday_campaign_stage` (defaults to `stage0`). All scenes read colors from `C` (`src/config/Colors.ts`) and camo textures from `CamoTexture.ts` — both delegate to the active theme, so no scene code needs changing when a new theme is added.
+
+### 13.1 Theme Structure
+
+```ts
+interface UITheme {
+  id: string;
+  name: string;
+  colors: { bgHex, bg, text, subtext, dim, btnBg, btnHover, btnStroke, btnText, rowBg, rowStroke };
+  skin: UISkin;  // controls how backgrounds and buttons are textured
+}
+
+// Current skin types (extend as needed):
+type CamoSkin = { type: 'camo'; bgColors, btnColors, bgBlockSize, btnBlockSize };
+type SolidSkin = { type: 'solid' };  // uses colors.bgHex / btnBg directly
+type UISkin = CamoSkin | SolidSkin;
+```
+
+`ensureCamoTextures` and `makeCamoButton` in `src/config/CamoTexture.ts` branch on `skin.type` at runtime — scene code requires no changes when the skin type changes. For `'solid'`, backgrounds are plain-color canvases and buttons are solid filled rectangles with color-swap hover.
+
+### 13.2 Defined Themes
+
+| Stage key | Theme name | Palette description |
+|-----------|------------|---------------------|
+| `stage0`  | Swamp      | Dark desaturated browns, tans, beiges. Near-black pixelated camo backgrounds. |
+
+### 13.3 Adding a New Stage Theme
+
+1. Define a new `UITheme` object in `src/config/UITheme.ts`
+2. Register it in the `THEMES` map with the stage key (e.g. `'stage1'`)
+3. Call `setCampaignStage('stage1')` when the player clears stage 0
+4. The new colors and camo textures apply automatically on next game load
+
+### 13.4 Campaign Stage Persistence
+
+`localStorage` key `zeroday_campaign_stage` stores the current stage string. `getCampaignStage()` reads it; `setCampaignStage(stage)` writes it. The theme resolves at JS module load time — changing the stage mid-session has no effect until the next page load.
+
+---
+
+## 14. Open Questions
 
 All design questions resolved for now. See relevant sections for answers.
+

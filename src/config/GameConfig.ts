@@ -7,7 +7,7 @@ export function setTileOffsetX(ox: number) { TILE_OFFSET_X = ox; }
 export const CANVAS_W = 1152; // 24 * 48 — max map width
 export const CANVAS_H = 1212; // 24 * 48 + 60 score bar
 export const MOVE_DURATION        = 250; // ms per tile (AI / tween base)
-export const PLAYER_MOVE_DURATION = 125; // ms per tile for human player (matches hard AI speed)
+export const PLAYER_MOVE_DURATION = 138; // ms per tile for human player
 export const BLOCK_HIT_COOLDOWN = 55; // ms between clicks (18 CPS cap)
 
 export const PLAYER_COLORS: Record<string, number> = {
@@ -15,6 +15,7 @@ export const PLAYER_COLORS: Record<string, number> = {
   red:    0xe05050,
   blue:   0x5080e0,
   yellow: 0xe0c040,
+  tan:    0xd4aa7d, // gallery dummy color
 };
 
 export const PLAYER_COLOR_NAMES = ['white', 'red', 'blue', 'yellow'] as const;
@@ -52,16 +53,16 @@ export const WEAPON_DAMAGES: Record<string, number> = {
   mace:   30,
   sword:  22,
   pistol: 25,
-  rifle:  20,
+  rifle:  20, // first hit; second hit (pierce) = 10
   sniper: 70,
-  laser:  35,
+  laser:  25,
   bow:    30,
-  rpg:    75,
+  rpg:    100, // direct hit; AOE = RPG_AOE_DAMAGE
 };
 
 export const WEAPON_RANGES: Record<string, number> = {
   pistol: 8,
-  rifle:  14,
+  rifle:  11,
   sniper: 9999,
   laser:  9999,
   bow:    12,
@@ -70,7 +71,7 @@ export const WEAPON_RANGES: Record<string, number> = {
 
 export const BOW_ARROW_SPEED = 8;  // tiles per second
 export const RPG_SPEED        = 5; // tiles per second
-export const RPG_AOE_MULT     = 0.5;
+export const RPG_AOE_DAMAGE   = 45;
 
 export const DROP_TABLE = [
   { item: 'pistol',  weight: 1 },
@@ -84,6 +85,8 @@ export const DROP_TABLE = [
   { item: 'medkit',  weight: 1 },
   { item: 'shield',  weight: 1 },
 ];
+
+export const MENU_BG_COUNT = 1; // number of images in public/assets/art/menu/ (0.png … n-1.png)
 
 export const AI_CPS: Record<string, number> = {
   easy:   4,

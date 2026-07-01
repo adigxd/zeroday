@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
-import { TILE_SIZE, TILE_OFFSET_X, SCORE_BAR_HEIGHT, PLAYER_COLORS, PLAYER_COLOR_NAMES, BOW_ARROW_SPEED, RPG_SPEED, RPG_AOE_MULT, CANVAS_W, CANVAS_H, setTileSize, setTileOffsetX } from '../config/GameConfig';
-import { loadTheme, getColors } from '../config/Theme';
+import { TILE_SIZE, TILE_OFFSET_X, SCORE_BAR_HEIGHT, PLAYER_COLORS, PLAYER_COLOR_NAMES, BOW_ARROW_SPEED, RPG_SPEED, RPG_AOE_DAMAGE, CANVAS_W, CANVAS_H, setTileSize, setTileOffsetX } from '../config/GameConfig';
+import { C } from '../config/Colors';
 import { getRandomMap, MapData, T_FLOOR, T_HOLE, T_SOLID, T_BLOCK, T_CRATE } from '../systems/MapManager';
 import { Player } from '../entities/Player';
 import { AIPlayer } from '../ai/AIStateMachine';
 import { Entity, Direction, EntityCallbacks } from '../entities/Entity';
-import { ScoreManager } from '../systems/ScoreManager';
-import { StatsTracker } from '../systems/StatsTracker';
+import { ScoreManager, CombatantScore } from '../systems/ScoreManager';
+import { StatsTracker, updateMaxWinstreak } from '../systems/StatsTracker';
 import { loadDifficulty } from './SettingsScene';
 import { rollDrop } from '../systems/DropSystem';
 import { loadBindings } from '../config/DefaultBindings';
@@ -67,18 +67,22 @@ export class GameScene extends Phaser.Scene {
   private arrows: ArrowSprite[] = [];
   private playerCount = 2;
   private roundNumber = 1;
+  private currentWinstreak = 0;
   private gameActive = false;
   private escKey!: Phaser.Input.Keyboard.Key;
   private testMode = false;
+  private youText?: Phaser.GameObjects.Text;
+  private youArrow?: Phaser.GameObjects.Text;
 
   constructor() { super('GameScene'); }
 
-  init(data: { playerCount: number; roundNumber: number; scoreManager?: ScoreManager; testMode?: boolean }) {
-    this.playerCount = data.playerCount ?? 2;
-    this.roundNumber = data.roundNumber ?? 1;
-    this.scoreManager = data.scoreManager ?? new ScoreManager();
-    this.statsTracker = new StatsTracker();
-    this.testMode = data.testMode ?? false;
+  init(data: { playerCount: number; roundNumber: number; scoreManager?: ScoreManager; testMode?: boolean; currentWinstreak?: number }) {
+    this.playerCount      = data.playerCount ?? 2;
+    this.roundNumber      = data.roundNumber ?? 1;
+    this.scoreManager     = data.scoreManager ?? new ScoreManager();
+    this.statsTracker     = new StatsTracker();
+    this.testMode         = data.testMode ?? false;
+    this.currentWinstreak = data.currentWinstreak ?? 0;
   }
 
   preload() {
@@ -87,7 +91,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
-    const C = getColors(loadTheme());
     this.map = getRandomMap(this.playerCount);
 
     // Tile size: fit the smaller dimension, center the other
@@ -101,7 +104,6 @@ export class GameScene extends Phaser.Scene {
     setTileSize(ts);
     setTileOffsetX(this.mapOffsetX);
 
-    void C; // theme used below in UI elements
 
     // Clear all carry-over state from previous round
     this.ais      = [];
@@ -157,8 +159,9 @@ export class GameScene extends Phaser.Scene {
 
   private makeCallbacks(): EntityCallbacks {
     return {
-      onDamage: (source, _target, amount) => {
-        this.scoreManager.addDamage(source.id, amount);
+      onDamage: (source, target, amount) => {
+        if (source.id !== target.id) this.scoreManager.addDamage(source.id, amount);
+        this.showDamageNumber(target.body.x, target.body.y, amount);
       },
       onDeath: (entity) => {
         if (entity.id === 'player') {
@@ -196,7 +199,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildScoreBar() {
-    const C = getColors(loadTheme());
     const { width } = this.scale;
     const scores = this.scoreManager.getAll();
     const slotW = width / scores.length;
@@ -241,6 +243,33 @@ export class GameScene extends Phaser.Scene {
     const steps = ['3', '2', '1', 'GO!'];
     let i = 0;
 
+    // YOU indicator — created here at the correct pixel position, destroyed when game starts
+    const inTopHalf = this.player.row < this.map.height / 2;
+    const { x: px, y: py } = this.tileToWorld(this.player.col, this.player.row);
+    const gap = TILE_SIZE * 0.5;
+    const arrowChar = inTopHalf ? '▲' : '▼';
+    // Arrow closest to player, text farther out
+    const arrowY = inTopHalf ? py + gap       : py - gap;
+    const textY  = inTopHalf ? py + gap + 18  : py - gap - 18;
+
+    this.youArrow = this.add.text(px, arrowY, arrowChar, {
+      fontFamily: '"Press Start 2P"', fontSize: '11px', color: '#eeeeee',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(50);
+    this.youText = this.add.text(px, textY, 'YOU', {
+      fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#eeeeee',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(50);
+
+    this.tweens.add({
+      targets: [this.youArrow, this.youText],
+      y: `+=${inTopHalf ? 5 : -5}`,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
     const show = () => {
       const t = this.add.text(cx, cy, steps[i], {
         fontFamily: '"Press Start 2P"',
@@ -264,6 +293,16 @@ export class GameScene extends Phaser.Scene {
             else {
               this.gameActive = true;
               this.input.keyboard!.on('keydown-ESC', this.onEsc, this);
+              this.tweens.killTweensOf([this.youArrow, this.youText]);
+              this.tweens.add({
+                targets: [this.youArrow, this.youText],
+                alpha: 0,
+                duration: 200,
+                onComplete: () => {
+                  this.youArrow?.destroy(); this.youArrow = undefined;
+                  this.youText?.destroy();  this.youText  = undefined;
+                },
+              });
             }
           });
         },
@@ -312,19 +351,82 @@ export class GameScene extends Phaser.Scene {
 
   private onEsc() {
     if (!this.gameActive) return;
+    if (this.skipBg) { this.doSkipRound(); return; }
     this.gameActive = false;
     this.scene.pause();
     this.scene.launch('PauseScene');
     this.scene.bringToTop('PauseScene');
   }
 
-  update(_time: number, delta: number) {
+  // Alive entity with most damage this round; random tiebreak. Used for skip-round point award.
+  private resolveSkipWinner(): Entity | null {
+    const alive = this.entities.filter(e => e.alive);
+    if (alive.length === 0) return null;
+    const scored = alive
+      .map(e => this.scoreManager.get(e.id))
+      .filter((s): s is CombatantScore => !!s);
+    if (scored.length === 0) return null;
+    const maxDmg = Math.max(...scored.map(s => s.roundDamage));
+    const tied   = scored.filter(s => s.roundDamage === maxDmg);
+    const pick   = tied[Math.floor(Math.random() * tied.length)];
+    return this.entities.find(e => e.id === pick.id) ?? null;
+  }
+
+  // Who to display as top damage dealer; player always wins ties regardless of alive status.
+  private resolveTopDamageDisplay(): CombatantScore | null {
+    const all    = this.scoreManager.getAll();
+    const maxDmg = Math.max(...all.map(s => s.roundDamage));
+    if (maxDmg <= 0) return null;
+    const tied  = all.filter(s => s.roundDamage === maxDmg);
+    const player = tied.find(s => s.id === 'player');
+    if (player) return player;
+    return tied[Math.floor(Math.random() * tied.length)];
+  }
+
+  private doSkipRound() {
+    if (!this.gameActive) return;
+    this.gameActive = false;
+
+    const winner = this.resolveSkipWinner();
+    if (winner) this.scoreManager.addRoundPoint(winner.id);
+    this.drawScoreBar();
+    this.destroySkipButton();
+    this.updateWinstreak(winner?.id === 'player');
+    this.showRoundEnd(winner);
+  }
+
+  update(time: number, delta: number) {
     if (!this.gameActive) return;
 
     if (!this.testMode) this.player.update(delta, this.map);
     this.ais.forEach(ai => { if (ai.alive) ai.update(delta, this.map); });
     this.updateArrows(delta);
     this.redrawDirtyTiles();
+    void time;
+  }
+
+  private showDamageNumber(bx: number, by: number, damage: number) {
+    const t = Math.min(1, damage / 75);
+    const g = Math.floor(255 * (1 - t));
+    const color = `#ff${g.toString(16).padStart(2, '0')}00`;
+    const fontSize = Math.max(10, Math.round(10 + damage * 0.2));
+    const offX = (Math.random() - 0.5) * TILE_SIZE * 0.5;
+
+    const txt = this.add.text(bx + offX, by - TILE_SIZE * 0.4, String(damage), {
+      fontFamily: '"Press Start 2P"', fontSize: `${fontSize}px`, color,
+      stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(55);
+
+    const driftX = (Math.random() - 0.5) * TILE_SIZE * 0.4;
+    this.tweens.add({
+      targets: txt,
+      x: txt.x + driftX,
+      y: by - TILE_SIZE * 1.4,
+      alpha: 0,
+      duration: 800,
+      ease: 'Power2',
+      onComplete: () => txt.destroy(),
+    });
   }
 
   private redrawDirtyTiles() {
@@ -453,10 +555,14 @@ export class GameScene extends Phaser.Scene {
       const tilesFromOrigin = Math.abs(tileCol - arrow.col) + Math.abs(tileRow - arrow.row);
       const outOfRange = arrow.isRpg && tilesFromOrigin > (6 + 0.5);
 
-      const hitObstacle = tile === undefined || tile === T_SOLID || tile === T_BLOCK || tile === T_CRATE;
+      const isBlocker = (t: number | undefined) => t === undefined || t === T_SOLID || t === T_BLOCK || t === T_CRATE;
+      const hitObstacle = isBlocker(tile);
 
       if (hitObstacle || outOfRange) {
-        if (arrow.isRpg) this.rpgExplode(tileCol, tileRow, arrow);
+        // Stop/explode at the last valid tile (one before the obstacle)
+        const stopCol = hitObstacle ? tileCol - d.dc : tileCol;
+        const stopRow = hitObstacle ? tileRow - d.dr : tileRow;
+        if (arrow.isRpg) this.rpgExplode(stopCol, stopRow, arrow);
         arrow.dead = true;
         arrow.rect.destroy();
         continue;
@@ -483,7 +589,6 @@ export class GameScene extends Phaser.Scene {
 
   private rpgExplode(epicolCol: number, epicRow: number, arrow: ArrowSprite) {
     const shooter = this.entities.find(e => e.id === arrow.ownerId);
-    const aoeDamage = Math.floor(arrow.damage * RPG_AOE_MULT);
     const { x: ex, y: ey } = this.tileToWorld(epicolCol, epicRow);
 
     // Visual explosion
@@ -516,10 +621,11 @@ export class GameScene extends Phaser.Scene {
           }
         }
 
-        // AoE damage to all entities (including shooter — friendly fire)
+        // Direct hit = full arrow damage (1-shot kill); surrounding tiles = AOE flat damage
+        const isDirect = dr === 0 && dc === 0;
         for (const e of this.entities) {
           if (e.alive && e.col === tc && e.row === tr) {
-            if (shooter) shooter.dealDamage(e, aoeDamage);
+            if (shooter) shooter.dealDamage(e, isDirect ? arrow.damage : RPG_AOE_DAMAGE);
           }
         }
       }
@@ -541,32 +647,12 @@ export class GameScene extends Phaser.Scene {
 
     const { width, height } = this.scale;
     const x = width / 2, y = height - 60;
-
-    const C = getColors(loadTheme());
     this.skipBg = this.add.rectangle(x, y, 230, 46, C.btnBg, 0.95).setStrokeStyle(2, C.btnStroke).setDepth(150).setInteractive({ useHandCursor: true });
     this.skipText = this.add.text(x, y, 'SKIP ROUND →', { fontFamily: '"Press Start 2P"', fontSize: '13px', color: C.btnText }).setOrigin(0.5).setDepth(151);
 
     this.skipBg.on('pointerover', () => { this.skipBg?.setFillStyle(C.btnHover); });
     this.skipBg.on('pointerout',  () => { this.skipBg?.setFillStyle(C.btnBg); });
-    this.skipBg.on('pointerdown', () => {
-      if (!this.gameActive) return;
-      this.gameActive = false;
-
-      // Find the top-damaging AI; if tied or no damage, pick a random AI
-      const aiScores = this.scoreManager.getAll().filter(s => s.id !== 'player');
-      const maxDmg   = Math.max(...aiScores.map(s => s.roundDamage));
-      const pool     = maxDmg > 0
-        ? aiScores.filter(s => s.roundDamage === maxDmg)
-        : aiScores;
-      const winner   = pool.length > 0
-        ? this.entities.find(e => e.id === pool[Math.floor(Math.random() * pool.length)].id) ?? null
-        : null;
-
-      if (winner) this.scoreManager.addRoundPoint(winner.id);
-      this.drawScoreBar();
-      this.destroySkipButton();
-      this.showRoundEnd(winner);
-    });
+    this.skipBg.on('pointerdown', () => this.doSkipRound());
   }
 
   private destroySkipButton() {
@@ -586,14 +672,23 @@ export class GameScene extends Phaser.Scene {
     const winner = alive[0] ?? null;
     if (winner) this.scoreManager.addRoundPoint(winner.id);
     this.drawScoreBar();
+    this.updateWinstreak(winner?.id === 'player');
 
     this.time.delayedCall(600, () => this.showRoundEnd(winner));
+  }
+
+  private updateWinstreak(playerWon: boolean) {
+    if (playerWon) {
+      this.currentWinstreak++;
+      updateMaxWinstreak(loadDifficulty(), this.currentWinstreak);
+    } else {
+      this.currentWinstreak = 0;
+    }
   }
 
   private showRoundEnd(winner: Entity | null) {
     const { width, height } = this.scale;
     const cx = width / 2, cy = height / 2;
-    const C = getColors(loadTheme());
 
     const panel = this.add.rectangle(cx, cy, 460, 300, C.bgHex, 0.97).setDepth(200);
     panel.setStrokeStyle(3, C.btnStroke);
@@ -609,26 +704,43 @@ export class GameScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 5,
     }).setOrigin(0.5).setDepth(201);
 
-    const top = this.scoreManager.topDamageDealer();
-    if (top) {
-      const topColor = hexColor(PLAYER_COLORS[top.colorName] ?? 0x111111);
-      this.add.text(cx, cy - 35, `Top damage: ${top.colorName}`, {
+    const top = this.resolveTopDamageDisplay();
+    const showTopDmg = !!top;
+    const showStreak = this.currentWinstreak > 0;
+
+    // Center all middle content in the zone between win text and buttons
+    const MID = cy - 10;
+    const LINE = 32;
+    const totalLines = (showTopDmg ? 2 : 0) + (showStreak ? 1 : 0);
+    const startY = MID - ((totalLines - 1) * LINE) / 2;
+    let lineIdx = 0;
+
+    if (showTopDmg) {
+      const topColor = hexColor(PLAYER_COLORS[top!.colorName] ?? 0x111111);
+      this.add.text(cx, startY + lineIdx++ * LINE, `Top damage: ${top!.colorName}`, {
         fontFamily: '"Press Start 2P"', fontSize: '13px', color: topColor,
         stroke: '#000000', strokeThickness: 3,
       }).setOrigin(0.5).setDepth(201);
-      this.add.text(cx, cy - 10, `${top.roundDamage} dmg dealt`, {
+      this.add.text(cx, startY + lineIdx++ * LINE, `${top!.roundDamage} dmg dealt`, {
         fontFamily: '"Press Start 2P"', fontSize: '12px', color: C.subtext,
+      }).setOrigin(0.5).setDepth(201);
+    }
+
+    if (showStreak) {
+      this.add.text(cx, startY + lineIdx++ * LINE, `Winstreak: ${this.currentWinstreak}`, {
+        fontFamily: '"Press Start 2P"', fontSize: '13px', color: '#ffdd44',
+        stroke: '#000000', strokeThickness: 3,
       }).setOrigin(0.5).setDepth(201);
     }
 
     const doNextRound = () => {
       this.scoreManager.resetRoundDamage();
-      this.scene.restart({ playerCount: this.playerCount, roundNumber: this.roundNumber + 1, scoreManager: this.scoreManager });
+      this.scene.restart({ playerCount: this.playerCount, roundNumber: this.roundNumber + 1, scoreManager: this.scoreManager, currentWinstreak: this.currentWinstreak });
     };
     const doMenu = () => this.scene.start('MenuScene');
 
-    this.makeOverlayButton(cx - 90, cy + 70, 'NEXT ROUND', C, doNextRound);
-    this.makeOverlayButton(cx + 90, cy + 70, 'MENU', C, doMenu);
+    this.makeOverlayButton(cx - 90, cy + 70, 'NEXT ROUND', doNextRound);
+    this.makeOverlayButton(cx + 90, cy + 70, 'MENU', doMenu);
 
     // Keyboard shortcuts on the round-end panel
     const attackBinding = loadBindings().attack;
@@ -639,7 +751,7 @@ export class GameScene extends Phaser.Scene {
     attackKey.once('down', doNextRound);
   }
 
-  private makeOverlayButton(x: number, y: number, label: string, C: ReturnType<typeof getColors>, cb: () => void) {
+  private makeOverlayButton(x: number, y: number, label: string, cb: () => void) {
     const bw = 155, bh = 44;
     const bg = this.add.rectangle(x, y, bw, bh, C.btnBg).setStrokeStyle(2, C.btnStroke).setDepth(202).setInteractive({ useHandCursor: true });
     const t = this.add.text(x, y, label, { fontFamily: '"Press Start 2P"', fontSize: '12px', color: C.btnText }).setOrigin(0.5).setDepth(203);

@@ -11,6 +11,7 @@ export class AIPlayer extends Entity {
   private blockCooldown = 0;
   private lastClickType: 'left' | 'right' = 'right';
   private difficulty: string;
+  private attackMultiplier: number;
   private wanderDir: Direction = 'down';
   private wanderTimer = 0;
   private cpsMs: number;
@@ -28,6 +29,9 @@ export class AIPlayer extends Entity {
   private idleMs = 0;
   private idleLastCol = -1;
   private idleLastRow = -1;
+  // Flee duration cap and re-entry cooldown
+  private fleeTimer    = 0; // counts down while in flee; forced exit at 0
+  private fleeCooldown = 0; // blocks flee re-entry after the state ends
 
 
   constructor(
@@ -42,11 +46,18 @@ export class AIPlayer extends Entity {
   ) {
     super(scene, id, colorName, col, row, offsetY, callbacks);
     this.difficulty = difficulty;
+    this.attackMultiplier = difficulty === 'easy' ? 2.0 : difficulty === 'medium' ? 1.5 : 1.0;
     this.cpsMs = 1000 / (AI_CPS[difficulty] ?? 4);
     // Movement speed scales with difficulty: Easy=250ms, Medium=187ms, Hard=125ms (half player speed)
     this.moveDuration = difficulty === 'hard' ? 150 : difficulty === 'medium' ? 187 : 250;
     this.moveCooldown = Math.random() * MOVE_DURATION;
     this.wanderTimer = Math.random() * 600;
+  }
+
+  // Scale attack cooldown by difficulty: hard=1x (weapon rate), medium=1.5x, easy=2x
+  attack(map: MapData) {
+    super.attack(map);
+    if (this.attackMultiplier !== 1.0) this.attackCooldown *= this.attackMultiplier;
   }
 
   update(delta: number, map: MapData) {
@@ -56,6 +67,15 @@ export class AIPlayer extends Entity {
     this.moveCooldown  = Math.max(0, this.moveCooldown  - delta);
     this.blockCooldown = Math.max(0, this.blockCooldown - delta);
     this.stateTimer    = Math.max(0, this.stateTimer    - delta);
+    this.fleeCooldown  = Math.max(0, this.fleeCooldown  - delta);
+    if (this.state === 'flee') {
+      this.fleeTimer = Math.max(0, this.fleeTimer - delta);
+      if (this.fleeTimer <= 0) {
+        // 5-second cap reached — exit flee and block re-entry for 5 seconds
+        this.fleeCooldown = 5000;
+        this.state = 'wander';
+      }
+    }
 
     // Dodge incoming projectiles before running the state machine
     this.checkDodge(map);
@@ -120,7 +140,16 @@ export class AIPlayer extends Entity {
 
     // ── Flee when low HP ──────────────────────────────────────────────────
     const fleeHp = this.difficulty === 'easy' ? 12 : this.difficulty === 'medium' ? 18 : 0;
-    if (this.hp <= fleeHp) {
+
+    // If currently fleeing but HP recovered above threshold, exit and impose cooldown
+    if (this.state === 'flee' && this.hp > fleeHp) {
+      this.fleeCooldown = 5000;
+      this.state = 'wander';
+      // fall through to normal state selection
+    }
+
+    if (this.hp <= fleeHp && this.fleeCooldown <= 0) {
+      if (this.state !== 'flee') this.fleeTimer = 5000; // fresh entry — arm 5s timer
       this.state = 'flee';
       this.crateTarget = null;
       this.itemTarget = null;
@@ -336,10 +365,10 @@ export class AIPlayer extends Entity {
       }
     }
 
-    // Verify target still exists (accept T_CRATE or T_BLOCK — both are breakable)
+    // Verify target still exists as a crate (not just any breakable block)
     const targetTile = map.tiles[this.crateTarget?.row ?? -1]?.[this.crateTarget?.col ?? -1];
-    if (!this.crateTarget || (targetTile !== T_CRATE && targetTile !== T_BLOCK)) {
-      this.crateTarget = this.findNearbyCrate(map, 12);
+    if (!this.crateTarget || targetTile !== T_CRATE) {
+      this.crateTarget = this.findNearbyCrate(map, 12, true);
       if (!this.crateTarget) { this.state = 'wander'; return; }
     }
 

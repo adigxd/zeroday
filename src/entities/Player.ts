@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { Entity, EntityCallbacks, Direction } from './Entity';
 import { PLAYER_MOVE_DURATION, BLOCK_HIT_COOLDOWN } from '../config/GameConfig';
-import { T_BLOCK, T_CRATE, MapData } from '../systems/MapManager';
+import { T_BLOCK, T_CRATE, T_SOLID, MapData } from '../systems/MapManager';
 import { loadBindings } from '../config/DefaultBindings';
 import { loadAttackMode, AttackMode, loadMoveMode, MoveMode } from '../scenes/SettingsScene';
 import { rollDrop } from '../systems/DropSystem';
@@ -91,10 +91,25 @@ export class Player extends Entity {
     }
 
     // Attack — held: auto-fires at weapon cooldown rate; tap: one press = one shot
-    const attackPressed = this.attackMode === 'tap'
-      ? Phaser.Input.Keyboard.JustDown(this.keys.attack)
-      : this.keys.attack.isDown;
-    if (attackPressed) this.attack(map);
+    const attackJustDown = Phaser.Input.Keyboard.JustDown(this.keys.attack);
+    const attackPressed  = attackJustDown || (this.attackMode === 'held' && this.keys.attack.isDown);
+    if (attackPressed) {
+      const dMap: Record<Direction, { dr: number; dc: number }> = {
+        up: { dr: -1, dc: 0 }, down: { dr: 1, dc: 0 },
+        left: { dr: 0, dc: -1 }, right: { dr: 0, dc: 1 },
+      };
+      const { dr, dc } = dMap[this.facing];
+      const frontTile = map.tiles[this.row + dr]?.[this.col + dc];
+      if (frontTile === T_BLOCK || frontTile === T_CRATE) {
+        // Break always requires a fresh tap — holding attack never auto-repeats the break
+        if (attackJustDown && this.blockCooldown <= 0) {
+          this.tryBreakBlock(map);
+          this.blockCooldown = BLOCK_HIT_COOLDOWN;
+        }
+      } else if (frontTile !== T_SOLID && this.blockCooldown <= 0) {
+        this.attack(map);
+      }
+    }
   }
 
   private tryBreakBlock(map: MapData) {
